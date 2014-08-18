@@ -240,7 +240,6 @@ pdf(outfile, width = 8.5, height = 5.5)
 # par(mfrow = c(1,1), las = 2) #3 graphs per row; 2=label always perpendicular to the axis
 nplot <- min(nrow(reordered$data), opt$options$max)
 for (i in 1:nplot) {
-  write(i, stderr())
   # Set plot title
   event <- strsplit(rownames(reordered$data)[i], split = "\\|")[[1]]
   title <- sprintf("%s (position = %s, length = %s, type = %s)", 
