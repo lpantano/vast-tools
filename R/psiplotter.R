@@ -30,7 +30,8 @@ source(file.path(scriptPath, "Rlib", "preprocess_sample_colors.R"))
 source(paste(c(scriptPath,"/Rlib/include.R"), collapse=""))
 source(paste(c(scriptPath,"/Rlib/include_diff.R"), collapse=""))
 
-loadPackages(c("optparse"), local.lib=paste(c(scriptPath,"/Rlib"), collapse=""))
+loadPackages(c("optparse", "ggplot2", "reshape2"), 
+             local.lib=paste(c(scriptPath,"/Rlib"), collapse=""))
 
 #### Arguments #################################################################
 # - Input file
@@ -205,9 +206,9 @@ all_events_formatted <- format_table(all_events)
 reordered <- preprocess_sample_colors(all_events_formatted, config_file)
 verbPrint(paste("//", ncol(reordered$data), "out of", 
                 ncol(all_events_formatted) / 2, "samples detected"))
-PSIs <- as.matrix(reordered$data)
+# PSIs <- as.matrix(reordered$data)
 #ALLev <- row.names(PSIs)
-samples <- colnames(PSIs)
+samples <- colnames(reordered$data)
 
 #### Prepare plotting ##########################################################
 verbPrint("// Plotting...")
@@ -215,7 +216,7 @@ verbPrint("// Plotting...")
 tissuegroups <- c("ESC", "Neural", "Muscle", "Tissues")
 
 # assign list of colors
-supercolors <- reordered$col
+# supercolors <- reordered$col
 
 # Set output file
 outfile <- "PSI_plots.pdf"
@@ -236,38 +237,33 @@ if (is.null(opt$options$output)) {
 }
 
 pdf(outfile, width = 8.5, height = 5.5)
-par(mfrow = c(1,1), las = 2) #3 graphs per row; 2=label always perpendicular to the axis
-nplot <- min(nrow(PSIs), opt$options$max)
+# par(mfrow = c(1,1), las = 2) #3 graphs per row; 2=label always perpendicular to the axis
+nplot <- min(nrow(reordered$data), opt$options$max)
 for (i in 1:nplot) {
+  write(i, stderr())
   # Set plot title
-  event <- strsplit(rownames(PSIs)[i], split = "\\|")[[1]]
+  event <- strsplit(rownames(reordered$data)[i], split = "\\|")[[1]]
   title <- sprintf("%s (position = %s, length = %s, type = %s)", 
     event[2], event[3], event[4], event[1])
 
 
   # Set up plot
-  plot(NA,
-       main=title,
-       ylab="PSI", xlab="", xaxt="n",
-       ylim=c(1,100), xlim=c(1, ncol(PSIs)),
-       cex.main=0.9, cex.axis=0.8)
-  axis(1, at=seq(1, ncol(PSIs), by=1), labels = FALSE)
-  text(seq(1, ncol(PSIs), by=1), 
-       par("usr")[3] - 3.5, 
-       labels = samples, 
-       srt = 45, adj=c(1,1), xpd = TRUE,cex=0.6)
-  
-  
+  mdata <- suppressMessages(melt(reordered$data[i,], 
+                                            variable.name = "sample", 
+                                            value.name = "psi"))
+  gp <- ggplot(mdata, aes(x = sample, y = psi)) +
+    geom_point(colour = reordered$col, size=2) +
+    ylab("PSI") +
+    xlab("") +
+    ylim(c(0, 100)) +
+    ggtitle(title)
+    
   # Draw error bars
   if (! opt$options$noErrorBar) {
     ci <- get_beta_ci(reordered$qual[i,])
     ci[which(is.na(reordered$data[i,])),] <- NA
     
-    arrows(1:ncol(PSIs), ci[,1],
-           1:ncol(PSIs), ci[,2],
-           length = 0.025,
-           angle = 90,
-           code = 3)
+    gp <- gp + geom_errorbar(aes(ymin = ci[,1], ymax = ci[,2]), width = 0.05)
   }
   
   # Draw horizontal lines
@@ -275,25 +271,22 @@ for (i in 1:nplot) {
     seen <- vector()
     for (t in 1:length(tissuegroups)) {
       if (tissuegroups[t] %in% names(reordered$group.index)) {
-        abline(h=mean(PSIs[i, reordered$group.index[[tissuegroups[t]]] ], 
-                      na.rm=TRUE), 
-               col=reordered$group.col[tissuegroups[t]], lwd=0.5)
-        seen <- append(seen, paste(tissuegroups[t], "Avg"))
+        mu <- mean(reordered$data[i, reordered$group.index[[tissuegroups[t]]]], 
+                   na.rm=TRUE)
+        gp <- gp + 
+          geom_hline(yintercept = mu,
+                     colour = reordered$group.col[tissuegroups[t]]) +
+          annotate("text", 0.8, min(100, mu + 2), 
+                   label = paste(tissuegroups[t], "Avg"),
+                   size = 3,
+                   color = reordered$group.col[tissuegroups[t]])
       }
     }
-    
-    # plot legend for mean group values
-    legend_position <- ifelse(PSIs[i,ncol(PSIs)] > 50, "bottomright", "topright")
-    legend(legend_position, legend = seen, lty = 1, col = reordered$group.col)  
   }
   
-  # Draw grid lines
-  abline(v=1:ncol(PSIs), col="grey", lwd=0.3, lty=2)
-  abline(h=seq(0,100,10), col="grey", lwd=0.3, lty=2)
-  
-  # Draw PSIs
-  points(1:ncol(PSIs), as.numeric(PSIs[i,]), col=as.character(supercolors), 
-         pch=20, cex = 1)
+  gp <- gp + theme_bw() + 
+    theme(axis.text.x = element_text(angle = 45, hjust = 1))
+  print(gp)
 }
 dev.off()
 
