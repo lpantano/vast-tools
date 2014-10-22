@@ -270,7 +270,8 @@ for (i in 1:nplot) {
     seen <- vector()
     for (t in 1:length(tissuegroups)) {
       if (tissuegroups[t] %in% names(reordered$group.index)) {
-        mu <- mean(reordered$data[i, reordered$group.index[[tissuegroups[t]]]], 
+        mu <- mean(as.numeric(
+          reordered$data[i, reordered$group.index[[tissuegroups[t]]]]), 
                    na.rm=TRUE)
         gp <- gp + 
           geom_hline(yintercept = mu,
