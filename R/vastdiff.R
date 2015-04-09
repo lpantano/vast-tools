@@ -6,20 +6,20 @@
 # Copyright (C) 2014 Tim Sterne-Weiler
 #
 # Permission is hereby granted, free of charge, to any person obtaining
-# a copy of this software and associated documentation files (the "Software"), 
-# to deal in the Software without restriction, including without limitation 
-# the rights to use, copy, modify, merge, publish, distribute, sublicense, 
-# and/or sell copies of the Software, and to permit persons to whom the Software 
+# a copy of this software and associated documentation files (the "Software"),
+# to deal in the Software without restriction, including without limitation
+# the rights to use, copy, modify, merge, publish, distribute, sublicense,
+# and/or sell copies of the Software, and to permit persons to whom the Software
 # is furnished to do so, subject to the following conditions:
 #
-# The above copyright notice and this permission notice shall be included in 
+# The above copyright notice and this permission notice shall be included in
 # all copies or substantial portions of the Software.
 #
-# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, 
-# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A 
-# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT 
-# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF 
-# CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE 
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED,
+# INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A
+# PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT
+# HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN ACTION OF
+# CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE
 # OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
 
 
@@ -69,6 +69,8 @@ option.list <- list(
         help = "Threshold for min diff where P( (psi1 - psi2) > threshold ) > --prob [default %default]"),
     make_option(c("-e", "--minReads"), type = "numeric", default = 10,
         help = "Threshold for min reads in a sample (use this flag unless you believe the prior) [default %default]"),
+    make_option(c("--minSamples"), type = "numeric", default = 6,
+                help = "Threshold for min samples with min reads in a group  [default %default]"),
     make_option(c("--alpha"), type = "numeric", default = 1,
         help = "First shape parameter for the Beta prior distribution P(psi), Uniform by default [default %default]"),
     make_option(c("--beta"), type = "numeric", default = 1,
@@ -101,7 +103,7 @@ set.seed(opt$seed)
 ## try and find the input file if they aren't exact
 if(!file.exists(opt$input)) {
   potentialFiles <- Sys.glob( paste(c("*",opt$input,"*"), collapse="") )
-  if( length( potentialFiles ) >= 1) { 
+  if( length( potentialFiles ) >= 1) {
 	 # now sort and take the one with the 'biggest' number of samples
     potentialFiles_sort <- rev( sort( potentialFiles ) )
     opt$input <- potentialFiles_sort[1]
@@ -124,9 +126,9 @@ inputFile <- file( opt$input, 'r' )
 firstRepSet <- unlist(strsplit( as.character(opt$replicateA) , "," ))
 secondRepSet <- unlist(strsplit( as.character(opt$replicateB), "," ))
 
-if( length(firstRepSet) <= 0 || 
-    length(secondRepSet) <= 0) { 
-  print_help(parser) 
+if( length(firstRepSet) <= 0 ||
+    length(secondRepSet) <= 0) {
+  print_help(parser)
   stop("[vast diff error]: No replicate sample names given!!! -a sampA,sampB -b sampC,sampD")
 }
 
@@ -171,9 +173,9 @@ repAind <- which( head_n %in% firstRepSet  )
 repBind <- which( head_n %in% secondRepSet )
 
 if(length(repAind) == 0 ||
-   length(repBind) == 0) { 
+   length(repBind) == 0) {
    print_help(parser)
-   stop("[vast diff error]: Incorrect sampleNames given, One or more do not exist!!!\n") 
+   stop("[vast diff error]: Incorrect sampleNames given, One or more do not exist!!!\n")
 }
 
 # Indexes of Quals
@@ -201,7 +203,7 @@ write(head, sighandle)
 
 ### BEGIN READ INPUT ###
 # Iterate through input, 'nLines' at a time to reduce overhead/memory
-while(length( lines <- readLines(inputFile, n=opt$nLines) ) > 0) { 
+while(length( lines <- readLines(inputFile, n=opt$nLines) ) > 0) {
 
   # use parallel computing to store plots in plotListed
   # then print them to the pdf afterwards before next chunk of nLines from file.
@@ -209,13 +211,13 @@ while(length( lines <- readLines(inputFile, n=opt$nLines) ) > 0) {
   eventTitleListed <- vector("list", length(lines))
 
   plotListed <- mclapply(1:length(lines), function(i) {
- 
+
       tabLine <- unlist( strsplit( lines[i], "\t" ) )
 	 #writeLines(paste(tabLine[repA.qualInd], collapse="\t"), stderr());
-	
+
       # Posterior parameters... Prior given from command line --alpha, --beta
-      shapeFirst <- lapply( tabLine[repA.qualInd], function(x) { 
-								parseQual(x, opt$alpha, opt$beta) 
+      shapeFirst <- lapply( tabLine[repA.qualInd], function(x) {
+								parseQual(x, opt$alpha, opt$beta)
 							   } )
       shapeSecond <- lapply( tabLine[repB.qualInd], function(x) {
 								parseQual(x, opt$alpha, opt$beta)
@@ -224,11 +226,11 @@ while(length( lines <- readLines(inputFile, n=opt$nLines) ) > 0) {
       totalFirst <- unlist(lapply( shapeFirst, function(x) { x[1] + x[2] }))
       totalSecond <- unlist(lapply( shapeSecond, function(x) { x[1] + x[2] }))
 
-      # if no data, next;
-      if( all(totalFirst < (opt$minReads + opt$alpha + opt$beta)) ||
-  	  all(totalSecond < (opt$minReads + opt$alpha + opt$beta)) ) {
-		return(NULL)
-      }
+	 # if no data, next;
+	 if( sum(totalFirst < (opt$minReads + opt$alpha + opt$beta))>opt$minSamples ||
+	         sum(totalSecond < (opt$minReads + opt$alpha + opt$beta))>opt$minSamples ) {
+	     return(NULL)
+	 }
 
       firstShapeMat <- do.call(rbind, shapeFirst)
       secondShapeMat <- do.call(rbind, shapeSecond)
@@ -250,15 +252,15 @@ while(length( lines <- readLines(inputFile, n=opt$nLines) ) > 0) {
       })
 
       # calculate expected value of psi for each replicate
-      expFirst <- unlist(lapply(shapeFirst, function(x) { 
+      expFirst <- unlist(lapply(shapeFirst, function(x) {
          if(x[1]+x[2] < opt$minReads) { return(NULL) }
-         x[1] / (x[1] + x[2]) 
+         x[1] / (x[1] + x[2])
       }))
       expSecond <- unlist(lapply(shapeSecond, function(x) {
-         if(x[1]+x[2] < opt$minReads) { return(NULL) } 
-         x[1] / (x[1] + x[2]) 
+         if(x[1]+x[2] < opt$minReads) { return(NULL) }
+         x[1] / (x[1] + x[2])
       }))
- 
+
       if(opt$paired) { #make sure both samples have a non-NULL replicate
         for(lstInd in 1:length(psiFirst)) {
           if(is.null(psiFirst[[lstInd]]) || is.null(psiSecond[[lstInd]])) {
@@ -267,7 +269,7 @@ while(length( lines <- readLines(inputFile, n=opt$nLines) ) > 0) {
           }
         }
       }
- 
+
       # Create non-parametric Joint Distributions
       psiFirstComb <- do.call(c, psiFirst)
       psiSecondComb <- do.call(c, psiSecond)
@@ -279,13 +281,13 @@ while(length( lines <- readLines(inputFile, n=opt$nLines) ) > 0) {
       # if they aren't paired, then shuffle the joint distributions...
       if( !opt$paired ) {
         paramFirst <- try (suppressWarnings(
-				fitdistr(psiFirstComb, 
-					"beta", 
+				fitdistr(psiFirstComb,
+					"beta",
 					list( shape1=firstShapeAve[1], shape2=firstShapeAve[2])
 				)$estimate ), TRUE )
         paramSecond <- try (suppressWarnings(
 				fitdistr(psiSecondComb,
-					"beta", 
+					"beta",
 					list( shape1=secondShapeAve[1], shape2=secondShapeAve[2])
 				)$estimate ), TRUE )
         # if optimization fails its because the distribution is too narrow
