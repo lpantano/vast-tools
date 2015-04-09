@@ -227,8 +227,8 @@ while(length( lines <- readLines(inputFile, n=opt$nLines) ) > 0) {
       totalSecond <- unlist(lapply( shapeSecond, function(x) { x[1] + x[2] }))
 
 	 # if no data, next;
-	 if( sum(totalFirst < (opt$minReads + opt$alpha + opt$beta))>opt$minSamples ||
-	         sum(totalSecond < (opt$minReads + opt$alpha + opt$beta))>opt$minSamples ) {
+	 if( sum(totalFirst > (opt$minReads + opt$alpha + opt$beta))<opt$minSamples ||
+	         sum(totalSecond > (opt$minReads + opt$alpha + opt$beta))<opt$minSamples ) {
 	     return(NULL)
 	 }
 
